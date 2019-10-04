@@ -1,9 +1,7 @@
 import numpy as np
 from scipy import special as sp_spec
 from math import pi, sqrt, cos, sin, acos
-import sys
-import time
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 class single_mie:
