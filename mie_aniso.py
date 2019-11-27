@@ -1,6 +1,9 @@
 import numpy as np
 from scipy import special as sp_spec
 from math import pi, sqrt, cos, sin, acos
+import matplotlib.pyplot as plt
+
+
 # import matplotlib.pyplot as plt
 
 
@@ -39,9 +42,13 @@ class single_mie:
         m = np.sqrt(self.eps_t) * np.sqrt(self.mu_t) / (np.sqrt(self.eps_m) * np.sqrt(self.mu_m))
         x = self.k * self.a
 
-        self.nmax = int(round(x + 4 * x ** (1. / 3.) + 2.))*2
+        nmax = int(round(x + 4 * x ** (1. / 3.) + 2.))
+        self.nmax = np.round(max(nmax, np.abs(m*x)) + 16)
+        # print("size factor:", x, "nmax:", self.nmax)
+
         besx = np.zeros(self.nmax, dtype=np.complex)
         dbesx = np.zeros(self.nmax, dtype=np.complex)
+        dbesx2 = np.zeros(self.nmax, dtype=np.complex)
         hanx = np.zeros(self.nmax, dtype=np.complex)
         dhanx = np.zeros(self.nmax, dtype=np.complex)
         besmx_e = np.zeros(self.nmax, dtype=np.complex)
@@ -54,8 +61,10 @@ class single_mie:
         sqmx = np.sqrt(0.5 * pi / (m * x))
         dsqmx = -0.5 * np.sqrt(0.5 * pi / (m * x) ** 3)
         for n in range(1, self.nmax + 1):
-            besx[n - 1] = sqx * sp_spec.jv(n + 0.5, x)  # sph bessel 1st kind
-            dbesx[n - 1] = sqx * sp_spec.jvp(n + 0.5, x) + dsqx * sp_spec.jv(n + 0.5, x)  # d. sph bessel 1st kind
+            # besx[n - 1] = sqx * sp_spec.jv(n + 0.5, x)  # sph bessel 1st kind
+            besx[n - 1] = sp_spec.spherical_jn(n, x)
+            # dbesx[n - 1] = sqx * sp_spec.jvp(n + 0.5, x) + dsqx * sp_spec.jv(n + 0.5, x)  # d. sph bessel 1st kind
+            dbesx[n - 1] = sp_spec.spherical_jn(n, x, True)
             hanx[n - 1] = sqx * sp_spec.hankel1(n + 0.5, x)  # sph. hankel 1st kind
             dhanx[n - 1] = sqx * sp_spec.h1vp(n + 0.5, x) + dsqx * sp_spec.hankel1(n + 0.5, x)  # d. sph. hankel 1st
 
@@ -68,12 +77,56 @@ class single_mie:
             besmx_m[n - 1] = sqmx * sp_spec.jv(n2 + 0.5, m * x)
             dbesmx_m[n - 1] = sqmx * sp_spec.jvp(n2 + 0.5, m * x) + dsqmx * sp_spec.jv(n2 + 0.5, m * x)
 
+        # plt.figure()
+        # plt.subplot(121)
+        # plt.plot(hanx)
+        # plt.subplot(122)
+        # plt.plot(dhanx)
+        # plt.plot(dbesx)
+        # plt.plot(hanx)
+        # plt.plot(dhanx)
+        # plt.plot(besmx_e)
+        # plt.plot(dbesmx_e)
+        # plt.plot(besmx_m)
+        # plt.plot(dbesmx_m)
+
         self.an = ((self.mu_m * m ** 2 * (besx + x * dbesx) * besmx_e - self.mu_t * besx * (
-                    besmx_e + m * x * dbesmx_e)) /
+                besmx_e + m * x * dbesmx_e)) /
                    (self.mu_m * m ** 2 * (hanx + x * dhanx) * besmx_e - self.mu_t * hanx * (
-                               besmx_e + m * x * dbesmx_e)))
+                           besmx_e + m * x * dbesmx_e)))
         self.bn = ((self.mu_t * (besx + x * dbesx) * besmx_m - self.mu_m * besx * (besmx_m + m * x * dbesmx_m)) /
                    (self.mu_t * (hanx + x * dhanx) * besmx_m - self.mu_m * hanx * (besmx_m + m * x * dbesmx_m)))
+
+        ################ new code #######################
+        # from pymiescatt
+        # mx = m * x
+        # nmax = np.round(2 + x + 4 * (x ** (1 / 3)))
+        # nmx = np.round(max(nmax, np.abs(mx)) + 16)
+        # n = n.arange(1, nmax + 1)  #
+        # nu = n + 0.5  #
+        #
+        # sx = np.sqrt(0.5 * np.pi * x)
+        #
+        # px = sx * jv(nu, x)  #
+        # p1x = np.append(np.sin(x), px[0:int(nmax) - 1])  #
+        #
+        # chx = -sx * yv(nu, x)  #
+        # ch1x = np.append(np.cos(x), chx[0:int(nmax) - 1])  #
+        #
+        # gsx = px - (0 + 1j) * chx  #
+        # gs1x = p1x - (0 + 1j) * ch1x  #
+        #
+        # # B&H Equation 4.89
+        # Dn = np.zeros(int(nmx), dtype=complex)
+        # for i in range(int(nmx) - 1, 1, -1):
+        #     Dn[i - 1] = (i / mx) - (1 / (Dn[i] + i / mx))
+        #
+        # D = Dn[1:int(nmax) + 1]  # Dn(mx), drop terms beyond nMax
+        # da = D / m + n / x
+        # db = m * D + n / x
+        #
+        # an = (da * px - p1x) / (da * gsx - gs1x)
+        # bn = (db * px - p1x) / (db * gsx - gs1x)
 
     def csca(self):
         return 2 * pi / self.k ** 2 * np.sum(
@@ -89,7 +142,7 @@ class single_mie:
         if n == 1 or n == 0:
             return 1
         else:
-            return n/(n-1)*self.ratio_of_double_factorials(n-2)
+            return n / (n - 1) * self.ratio_of_double_factorials(n - 2)
 
     def csca_fb(self):
         """
@@ -98,20 +151,20 @@ class single_mie:
         """
 
         # first part of the sum
-        print(self.nmax)
+
         orders = np.arange(1, self.nmax + 1)
         p1 = np.sum((2 * orders + 1) * (np.abs(self.an) ** 2 + np.abs(self.bn) ** 2))
 
         # second part of the sum
         kk = orders[1::2, np.newaxis]  # evn (int)
         ll = orders[np.newaxis, 0::2]  # odd (int)
-        print(kk.shape, ll.shape)
+        # print(kk.shape, ll.shape)
 
         # calculate ratio of double factorials
         # dfac_ratio_kk = np.where(kk < 100, sp_spec.factorial2(kk - 1) / sp_spec.factorial2(kk),
         #                          1 / np.sqrt(np.pi * kk / 2))
 
-        dfac_ratio_kk = np.array([1/self.ratio_of_double_factorials(k) for k in kk[:, 0]])[:, np.newaxis]
+        dfac_ratio_kk = np.array([1 / self.ratio_of_double_factorials(k) for k in kk[:, 0]])[:, np.newaxis]
         # dfac_ratio_ll = np.where(ll < 100, sp_spec.factorial2(ll) / sp_spec.factorial2(ll - 1),
         #                          np.sqrt(2 * ll ** 2 / (ll - 1) / np.pi))
         dfac_ratio_ll = np.array([self.ratio_of_double_factorials(l) for l in ll[0, :]])[np.newaxis, :]
@@ -133,15 +186,15 @@ class single_mie:
                     * dfac_ratio_ll  # (sp_spec.factorial2(ll) / sp_spec.factorial2(ll - 1))
                     * (self.an[1::2, np.newaxis] * self.an[np.newaxis, 0::2].conjugate()
                        + self.bn[1::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
-                       
-                       
-        p2_uj = 2/np.pi*np.sum((-1) ** ((kk + ll - 1) / 2) * (2 * kk + 1) * (2 * ll + 1) / ((kk - ll) * (kk + ll + 1))
-                    # * sp_spec.gamma((ll+2)/2)/sp_spec.gamma((ll+1)/2)
-                    * np.exp(sp_spec.gammaln((ll+2)/2)-sp_spec.gammaln((ll+1)/2))
-                    # * sp_spec.gamma((kk+1)/2)/sp_spec.gamma((kk+2)/2)
-                    * np.exp(sp_spec.gammaln((kk+1)/2)-sp_spec.gammaln((kk+2)/2))
-                    * (self.an[1::2, np.newaxis] * self.an[np.newaxis, 0::2].conjugate()
-                       + self.bn[1::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
+
+        # p2_uj = 2 / np.pi * np.sum(
+            # (-1) ** ((kk + ll - 1) / 2) * (2 * kk + 1) * (2 * ll + 1) / ((kk - ll) * (kk + ll + 1))
+            # # * sp_spec.gamma((ll+2)/2)/sp_spec.gamma((ll+1)/2)
+            # * np.exp(sp_spec.gammaln((ll + 2) / 2) - sp_spec.gammaln((ll + 1) / 2))
+            # # * sp_spec.gamma((kk+1)/2)/sp_spec.gamma((kk+2)/2)
+            # * np.exp(sp_spec.gammaln((kk + 1) / 2) - sp_spec.gammaln((kk + 2) / 2))
+            # * (self.an[1::2, np.newaxis] * self.an[np.newaxis, 0::2].conjugate()
+               # + self.bn[1::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
 
         # third part of the sum
         kk = orders[0::2, np.newaxis]
@@ -157,18 +210,21 @@ class single_mie:
                     * dfac_ratio_kk  # (sp_spec.factorial2(kk) / sp_spec.factorial2(kk-1))
                     * dfac_ratio_ll  # (sp_spec.factorial2(ll) / sp_spec.factorial2(ll-1))
                     * (self.an[0::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
-                    
-        p3_uj = 4/np.pi*np.sum((-1) ** ((kk + ll) / 2) * (2 * kk + 1) * (2 * ll + 1) / (kk * (kk + 1) * ll * (ll + 1))
-              
-                # * dfac_ratio_kk  # (sp_spec.factorial2(kk) / sp_spec.factorial2(kk-1))
-                * np.exp(sp_spec.gammaln((kk+2)/2) - sp_spec.gammaln((kk+1)/2))
-                    # * dfac_ratio_ll  # (sp_spec.factorial2(ll) / sp_spec.factorial2(ll-1))
-                * np.exp(sp_spec.gammaln((ll+2)/2) - sp_spec.gammaln((ll+1)/2))
-                    * (self.an[0::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
+
+        # p3_uj = 4 / np.pi * np.sum(
+            # (-1) ** ((kk + ll) / 2) * (2 * kk + 1) * (2 * ll + 1) / (kk * (kk + 1) * ll * (ll + 1))
+
+            # # * dfac_ratio_kk  # (sp_spec.factorial2(kk) / sp_spec.factorial2(kk-1))
+            # * np.exp(sp_spec.gammaln((kk + 2) / 2) - sp_spec.gammaln((kk + 1) / 2))
+            # # * dfac_ratio_ll  # (sp_spec.factorial2(ll) / sp_spec.factorial2(ll-1))
+            # * np.exp(sp_spec.gammaln((ll + 2) / 2) - sp_spec.gammaln((ll + 1) / 2))
+            # * (self.an[0::2, np.newaxis] * self.bn[np.newaxis, 0::2].conjugate()).real)
 
         csca_f = pi / self.k ** 2 * (p1 - 2 * p2 - 2 * p3)
         csca_b = pi / self.k ** 2 * (p1 + 2 * p2 + 2 * p3)
-        print(pi / self.k ** 2 *p1, pi / self.k ** 2 *2*p2, pi / self.k ** 2 *2*p2_uj, pi / self.k ** 2 *2*p3, pi / self.k ** 2 *2*p3_uj)
+        # print("p1:", pi / self.k ** 2 * p1)
+        # print("p2:", pi / self.k ** 2 * 2 * p2, pi / self.k ** 2 * 2 * p2_uj)
+        # print("p3:", pi / self.k ** 2 * 2 * p3, pi / self.k ** 2 * 2 * p3_uj)
 
         return csca_f, csca_b
 
